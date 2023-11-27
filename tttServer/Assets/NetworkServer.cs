@@ -3,6 +3,7 @@ using UnityEngine.Assertions;
 using Unity.Collections;
 using Unity.Networking.Transport;
 using System.Text;
+using System.Collections;
 
 public class NetworkServer : MonoBehaviour
 {
@@ -175,9 +176,24 @@ public class NetworkServer : MonoBehaviour
             {
                 SendMessageToClient(moveMsg, networkConnections[i]);
             }
+        } 
+        else if (msgParts[0] == "WINNER" || msgParts[0] == "LOSER") // If the server receives a "WINNER" message, send a "RESET" msg to all clients
+        {
+            // Send a "RESET" message to all clients
+            string resetMsg = "RESET";           
+            for (int i = 0; i < networkConnections.Length; i++)
+            {
+                SendMessageToClient(resetMsg, networkConnections[i]);
+            }
+        }
+
+        else if (msgParts[0] == "RESET_COMPLETE")
+        {
+            // Send a "YOUR_TURN" message to the current player
+            string turnMsg = "YOUR_TURN";
+            SendMessageToClient(turnMsg, networkConnections[0]);
         }
     }
-
 
     public void SendMessageToClient(string msg, NetworkConnection networkConnection)
     {
