@@ -16,6 +16,10 @@ public class NetworkServer : MonoBehaviour
 
     const int MaxNumberOfClientConnections = 1000;
 
+    private int currentPlayerIndex = 0;
+
+    public char currentPlayerSymbol = 'x';
+
     void Start()
     {
         networkDriver = NetworkDriver.Create();
@@ -124,6 +128,13 @@ public class NetworkServer : MonoBehaviour
             return false;
 
         networkConnections.Add(connection);
+
+        // If this is the first client that connected, it's their turn
+        if (networkConnections.Length == 1)
+        {
+            SendMessageToClient("YOUR_TURN", networkConnections[0]);
+        }
+
         return true;
     }
 
@@ -136,10 +147,37 @@ public class NetworkServer : MonoBehaviour
         return true;
     }
 
+
     private void ProcessReceivedMsg(string msg)
     {
         Debug.Log("Msg received = " + msg);
+
+        // Split the message into parts
+        string[] msgParts = msg.Split(',');
+
+        // If the server receives a "MOVE" message, move to the next player
+        if (msgParts[0] == "MOVE")
+        {
+            currentPlayerIndex++;
+            if (currentPlayerIndex >= networkConnections.Length)
+                currentPlayerIndex = 0;
+
+            // Switch the currentPlayerSymbol to the other player's symbol
+            currentPlayerSymbol = currentPlayerSymbol == 'x' ? 'o' : 'x';
+
+            // Send a "YOUR_TURN" message to the current player
+            string turnMsg = $"YOUR_TURN,{currentPlayerSymbol}";
+            SendMessageToClient(turnMsg, networkConnections[currentPlayerIndex]);
+
+            // Send a "MOVE" message to all clients
+            string moveMsg = $"MOVE,{msgParts[1]},{currentPlayerSymbol}";
+            for (int i = 0; i < networkConnections.Length; i++)
+            {
+                SendMessageToClient(moveMsg, networkConnections[i]);
+            }
+        }
     }
+
 
     public void SendMessageToClient(string msg, NetworkConnection networkConnection)
     {
