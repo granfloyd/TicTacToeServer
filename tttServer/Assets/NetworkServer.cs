@@ -6,7 +6,7 @@ using System.Text;
 using System.IO;
 using System.Collections;
 using System.Collections.Generic;
-
+using System;
 
 public static class Data
 {
@@ -43,6 +43,10 @@ public class NetworkServer : MonoBehaviour
     const int usernameSignifier = 1;
     
     const char SepChar = ',';
+
+    public int playerCount = 0;
+
+    public bool bRoomFull = false;
 
     Dictionary<int, NetworkConnection> idToConnectionLookup;
     Dictionary<NetworkConnection, int> connectionToIDLookup;
@@ -90,7 +94,16 @@ public class NetworkServer : MonoBehaviour
     void Update()
     {
         #region Check Input and Send Msg
-
+        if (bRoomFull)
+        {
+            for (int i = 0; i < networkConnections.Length; i++)
+            {
+                SendMessageToClient("CREATING_GAME", i, TransportPipeline.ReliableAndInOrder);
+            }
+            
+            SendMessageToClient("YOUR_TURN", 0, TransportPipeline.ReliableAndInOrder);
+            bRoomFull = false;
+        }
         if (Input.GetKeyDown(KeyCode.A))
         {
             for (int i = 0; i < networkConnections.Length; i++)
@@ -113,6 +126,7 @@ public class NetworkServer : MonoBehaviour
                 i--;
             }
         }
+
 
         #endregion
 
@@ -190,10 +204,7 @@ public class NetworkServer : MonoBehaviour
         networkConnections.Add(connection);
 
         // If this is the first client that connected, it's their turn
-        if (networkConnections.Length == 1)
-        {
-            SendMessageToClient("YOUR_TURN", 0,TransportPipeline.ReliableAndInOrder);
-        }
+
 
         return true;
     }
@@ -267,7 +278,7 @@ public class NetworkServer : MonoBehaviour
 
         // Split the message into parts
         string[] msgParts = msg.Split(',');
-
+        string[] usernames;
         if (msgParts[0] == "MAKE_ACCOUNT")
         {
             // Check if an account with the same username already exists
@@ -306,27 +317,58 @@ public class NetworkServer : MonoBehaviour
             }
             SendMessageToClient("Invalid username or password", clientConnectionID, TransportPipeline.ReliableAndInOrder); 
         }
-        // If the server receives a "MOVE" message, move to the next player
-        if (msgParts[0] == "MOVE")
+        string roomName;
+        if (msgParts[0] == "ROOM_")
         {
-            currentPlayerIndex++;
-            if (currentPlayerIndex >= networkConnections.Length)
-                currentPlayerIndex = 0;
-
-            // Switch the currentPlayerSymbol to the other player's symbol
-            currentPlayerSymbol = currentPlayerSymbol == 'x' ? 'o' : 'x';
-
-            // Send a "YOUR_TURN" message to the current player
-            string turnMsg = $"YOUR_TURN,{currentPlayerSymbol}";
-            SendMessageToClient(turnMsg, clientConnectionID, TransportPipeline.ReliableAndInOrder);
-
-            // Send a "MOVE" message to all clients
-            string moveMsg = $"MOVE,{msgParts[1]},{currentPlayerSymbol}";
-            for (int i = 0; i < networkConnections.Length; i++)
+            roomName = msgParts[1];
+            playerCount += 1;
+            if(playerCount == 2)
             {
-                SendMessageToClient(moveMsg, i, TransportPipeline.ReliableAndInOrder);
+                for (int i = 0; i < networkConnections.Length; i++)
+                {
+                    SendMessageToClient("GIMME_YOUR_INFO", i, TransportPipeline.ReliableAndInOrder);
+                }
+                
             }
-        } 
+            
+           
+        }
+        if (msgParts[0] == "GET_USERNAME")
+        {
+            usernames = msgParts[1].Split(",");
+        }
+
+        if (msgParts[0] == "ROOM_EXIT")
+        {
+            playerCount -= 1;
+            SendMessageToClient("player count:" + playerCount, clientConnectionID, TransportPipeline.ReliableAndInOrder);
+        }
+        if(playerCount == 2)
+        {
+            bRoomFull = true;
+            // If the server receives a "MOVE" message, move to the next player
+            if (msgParts[0] == "MOVE")
+            {
+                currentPlayerIndex++;
+                if (currentPlayerIndex >= networkConnections.Length)
+                    currentPlayerIndex = 0;
+
+                // Switch the currentPlayerSymbol to the other player's symbol
+                currentPlayerSymbol = currentPlayerSymbol == 'x' ? 'o' : 'x';
+
+                // Send a "YOUR_TURN" message to the current player
+                string turnMsg = $"YOUR_TURN,{currentPlayerSymbol}";
+                SendMessageToClient(turnMsg, clientConnectionID, TransportPipeline.ReliableAndInOrder);
+
+                // Send a "MOVE" message to all clients
+                string moveMsg = $"MOVE,{msgParts[1]},{currentPlayerSymbol}";
+                for (int i = 0; i < networkConnections.Length; i++)
+                {
+                    SendMessageToClient(moveMsg, i, TransportPipeline.ReliableAndInOrder);
+                }
+            }
+        }
+       
         else if (msgParts[0] == "WINNER" || msgParts[0] == "LOSER") // If the server receives a "WINNER" message, send a "RESET" msg to all clients
         {
             // Send a "RESET" message to all clients
