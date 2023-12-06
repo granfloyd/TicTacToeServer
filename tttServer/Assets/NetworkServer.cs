@@ -50,10 +50,14 @@ public class NetworkServer : MonoBehaviour
 
     Dictionary<int, NetworkConnection> idToConnectionLookup;
     Dictionary<NetworkConnection, int> connectionToIDLookup;
+    Dictionary<string, List<string>> roomUsernames = new Dictionary<string, List<string>>();
+    Dictionary<string, List<int>> roomClients = new Dictionary<string, List<int>>();
+    public string roomName;
     void Start()
     {
         idToConnectionLookup = new Dictionary<int, NetworkConnection>();
         connectionToIDLookup = new Dictionary<NetworkConnection, int>();
+        Debug.Log(Application.persistentDataPath);
 
 
         networkDriver = NetworkDriver.Create();
@@ -94,16 +98,7 @@ public class NetworkServer : MonoBehaviour
     void Update()
     {
         #region Check Input and Send Msg
-        if (bRoomFull)
-        {
-            for (int i = 0; i < networkConnections.Length; i++)
-            {
-                SendMessageToClient("CREATING_GAME", i, TransportPipeline.ReliableAndInOrder);
-            }
-            
-            SendMessageToClient("YOUR_TURN", 0, TransportPipeline.ReliableAndInOrder);
-            bRoomFull = false;
-        }
+
         if (Input.GetKeyDown(KeyCode.A))
         {
             for (int i = 0; i < networkConnections.Length; i++)
@@ -222,17 +217,17 @@ public class NetworkServer : MonoBehaviour
     {
         LinkedList<string> saveData = SerializeAccountData();
 
-        StreamWriter writer = new StreamWriter("datafile.txt");
+        StreamWriter writer = new StreamWriter(Application.persistentDataPath.ToString() + Path.DirectorySeparatorChar + "datafile.txt");
         foreach (string line in saveData)
             writer.WriteLine(line);
         writer.Close();
     }
     static public void LoadData()
     {
-        Data.accounts.Clear();
+        //Data.accounts.Clear();
         LinkedList<string> serializedData = new LinkedList<string>();
         string line = "";
-        StreamReader sr = new StreamReader("datafile.txt");
+        StreamReader sr = new StreamReader(Application.persistentDataPath.ToString() + Path.DirectorySeparatorChar + "datafile.txt");
         {
 
             while (!sr.EndOfStream)
@@ -274,11 +269,33 @@ public class NetworkServer : MonoBehaviour
 
     private void ProcessReceivedMsg(string msg, int clientConnectionID, TransportPipeline pipeline)
     {
+        LoadData();
         Debug.Log("Msg received = " + msg);
 
-        // Split the message into parts
         string[] msgParts = msg.Split(',');
-        string[] usernames;
+        if (msgParts[0] == "CHAT_MSG")
+        {
+            if (msgParts.Length < 3)
+            {
+                Debug.Log("Invalid message format.");
+                return;
+            }
+
+            string chatusername = msgParts[1];
+            string chattext = msgParts[2];
+
+            if (string.IsNullOrWhiteSpace(chatusername))
+            {
+                chatusername = "depression";
+                Debug.Log("Username cannot be blank.");
+                //return;
+            }
+            for (int i = 0; i < networkConnections.Length; i++)
+            {
+                SendMessageToClient("CHAT_MSG," + chatusername + "," + chattext, i, TransportPipeline.ReliableAndInOrder);
+            }
+        }
+
         if (msgParts[0] == "MAKE_ACCOUNT")
         {
             // Check if an account with the same username already exists
@@ -317,58 +334,75 @@ public class NetworkServer : MonoBehaviour
             }
             SendMessageToClient("Invalid username or password", clientConnectionID, TransportPipeline.ReliableAndInOrder); 
         }
-        string roomName;
+
+        // When a user joins a room
         if (msgParts[0] == "ROOM_")
         {
             roomName = msgParts[1];
-            playerCount += 1;
-            if(playerCount == 2)
+            int clientID = clientConnectionID; // Assuming clientConnectionID is the ID of the client
+
+            if (!roomClients.ContainsKey(roomName))
             {
-                for (int i = 0; i < networkConnections.Length; i++)
-                {
-                    SendMessageToClient("GIMME_YOUR_INFO", i, TransportPipeline.ReliableAndInOrder);
-                }
-                
+                roomClients[roomName] = new List<int>();
             }
-            
-           
-        }
-        if (msgParts[0] == "GET_USERNAME")
-        {
-            usernames = msgParts[1].Split(",");
+
+            roomClients[roomName].Add(clientID);
+            playerCount += 1;
         }
 
+        // When a user leaves a room
         if (msgParts[0] == "ROOM_EXIT")
         {
-            playerCount -= 1;
-            SendMessageToClient("player count:" + playerCount, clientConnectionID, TransportPipeline.ReliableAndInOrder);
-        }
-        if(playerCount == 2)
-        {
-            bRoomFull = true;
-            // If the server receives a "MOVE" message, move to the next player
-            if (msgParts[0] == "MOVE")
+            roomName = msgParts[1];
+            int clientID = clientConnectionID; // Assuming clientConnectionID is the ID of the client
+
+            if (roomClients.ContainsKey(roomName))
             {
-                currentPlayerIndex++;
-                if (currentPlayerIndex >= networkConnections.Length)
-                    currentPlayerIndex = 0;
-
-                // Switch the currentPlayerSymbol to the other player's symbol
-                currentPlayerSymbol = currentPlayerSymbol == 'x' ? 'o' : 'x';
-
-                // Send a "YOUR_TURN" message to the current player
-                string turnMsg = $"YOUR_TURN,{currentPlayerSymbol}";
-                SendMessageToClient(turnMsg, clientConnectionID, TransportPipeline.ReliableAndInOrder);
-
-                // Send a "MOVE" message to all clients
-                string moveMsg = $"MOVE,{msgParts[1]},{currentPlayerSymbol}";
-                for (int i = 0; i < networkConnections.Length; i++)
-                {
-                    SendMessageToClient(moveMsg, i, TransportPipeline.ReliableAndInOrder);
-                }
+                roomClients[roomName].Remove(clientID);
+                playerCount -= 1; 
             }
         }
-       
+
+        if(!bRoomFull)
+        {
+            if (playerCount == 2)
+            {
+                List<int> clientsInRoom = roomClients[roomName]; // Get the clients in the room
+
+                // Send the "CREATING_GAME" message to the first 2 clients in the room
+                for (int i = 0; i < 2; i++)
+                {
+                    SendMessageToClient("CREATING_GAME", clientsInRoom[i], TransportPipeline.ReliableAndInOrder);
+                }
+
+                // Send the "YOUR_TURN" message to the first client in the room
+                SendMessageToClient("YOUR_TURN", clientsInRoom[0], TransportPipeline.ReliableAndInOrder);
+                bRoomFull = true;
+            }
+        }
+        
+
+        if (msgParts[0] == "MOVE")
+        {
+            currentPlayerIndex++;
+            if (currentPlayerIndex >= networkConnections.Length)
+                currentPlayerIndex = 0;
+
+            // Switch the currentPlayerSymbol to the other player's symbol
+            currentPlayerSymbol = currentPlayerSymbol == 'x' ? 'o' : 'x';
+
+            // Send a "YOUR_TURN" message to the current player
+            string turnMsg = $"YOUR_TURN,{currentPlayerSymbol}";
+            SendMessageToClient(turnMsg, currentPlayerIndex, TransportPipeline.ReliableAndInOrder);
+
+            // Send a "MOVE" message to all clients
+            string moveMsg = $"MOVE,{msgParts[1]},{currentPlayerSymbol}";
+            for (int i = 0; i < networkConnections.Length; i++)
+            {
+                SendMessageToClient(moveMsg, i, TransportPipeline.ReliableAndInOrder);
+            }
+        }
+
         else if (msgParts[0] == "WINNER" || msgParts[0] == "LOSER") // If the server receives a "WINNER" message, send a "RESET" msg to all clients
         {
             // Send a "RESET" message to all clients
@@ -405,22 +439,6 @@ public class NetworkServer : MonoBehaviour
         buffer.Dispose();
     }
 
-    //public void SendMessageToClient(string msg, NetworkConnection networkConnection)
-    //{
-    //    byte[] msgAsByteArray = Encoding.Unicode.GetBytes(msg);
-    //    NativeArray<byte> buffer = new NativeArray<byte>(msgAsByteArray, Allocator.Persistent);
-
-
-    //    //Driver.BeginSend(m_Connection, out var writer);
-    //    DataStreamWriter streamWriter;
-    //    //networkConnection.
-    //    networkDriver.BeginSend(reliableAndInOrderPipeline, networkConnection, out streamWriter);
-    //    streamWriter.WriteInt(buffer.Length);
-    //    streamWriter.WriteBytes(buffer);
-    //    networkDriver.EndSend(streamWriter);
-
-    //    buffer.Dispose();
-    //}
 
 }
 public enum TransportPipeline
