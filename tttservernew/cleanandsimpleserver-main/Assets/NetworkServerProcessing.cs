@@ -8,6 +8,7 @@ using UnityEditor.Experimental.GraphView;
 using Unity.VisualScripting;
 using System.Security.Cryptography;
 using UnityEditor.PackageManager;
+using Unity.Networking.Transport;
 
 public static class Data
 {
@@ -44,8 +45,10 @@ static public class NetworkServerProcessing
 
     const char sep = ',';
     #region Send and Receive Data Functions
+
     static public void ReceivedMessageFromClient(string msg, int clientConnectionID, TransportPipeline pipeline)
     {
+        Debug.Log(currentPlayerIndex);
         LoadData();
         Debug.Log("Network msg received =  " + msg + ", from connection id = " + clientConnectionID + ", from pipeline = " + pipeline);
 
@@ -150,8 +153,47 @@ static public class NetworkServerProcessing
 
                 // Send the "YOUR_TURN" message to the first client in the room
                 SendMessageToClient(ServerToClientSignifiers.WhosTurn.ToString(), clientsInRoom[0], TransportPipeline.ReliableAndInOrder);
+                currentPlayerIndex = 1;
                 bRoomFull = true;
             }
+        }
+        else if (signifier == ClientToServerSignifiers.DisplayMove)
+        {
+            currentPlayerIndex++;
+            if (currentPlayerIndex >= networkServer.networkConnections.Length)
+                currentPlayerIndex = 0;
+
+            // Switch the currentPlayerSymbol to the other player's symbol
+            currentPlayerSymbol = currentPlayerSymbol == 'x' ? 'o' : 'x';
+
+            // Send a "MOVE" message to all clients
+            string moveMsg = ServerToClientSignifiers.DisplayMove.ToString() + sep +
+                csv[1] + sep +
+                currentPlayerSymbol.ToString();
+            for (int i = 0; i < networkServer.networkConnections.Length; i++)
+            {
+                SendMessageToClient(moveMsg, i, TransportPipeline.ReliableAndInOrder);
+            }
+
+            // Send a "YOUR_TURN" message to the current player
+            string turnMsg = ServerToClientSignifiers.WhosTurn.ToString() + sep +
+                currentPlayerSymbol.ToString();
+            SendMessageToClient(turnMsg, currentPlayerIndex, TransportPipeline.ReliableAndInOrder);
+
+        }
+        else if (signifier == ClientToServerSignifiers.Loser)
+        {
+            List<int> clientsInRoom = roomClients[roomName]; // Get the clients in the room
+
+            SendMessageToClient(ServerToClientSignifiers.WhosTurn.ToString(), clientsInRoom[0], TransportPipeline.ReliableAndInOrder);
+            currentPlayerIndex = 1;
+        }
+        else if (signifier == ClientToServerSignifiers.Winner)
+        {
+            List<int> clientsInRoom = roomClients[roomName]; // Get the clients in the room
+
+            SendMessageToClient(ServerToClientSignifiers.WhosTurn.ToString(), clientsInRoom[0], TransportPipeline.ReliableAndInOrder);
+            currentPlayerIndex = 1;
         }
     }
     static public void SendMessageToClient(string msg, int clientConnectionID, TransportPipeline pipeline)
@@ -278,6 +320,7 @@ static public class ServerToClientSignifiers
     public const int CreateGame = 4;
     public const int WhosTurn = 5;
     public const int DisplayMove = 6;
+    public const int FirstStart = 99;
     public const int Restart = 7;
     public const int RoomJoin = 11;
     public const int RoomExit = 12;
