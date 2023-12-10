@@ -16,19 +16,7 @@ public class NetworkServer : MonoBehaviour
     Dictionary<int, NetworkConnection> idToConnectionLookup;
     Dictionary<NetworkConnection, int> connectionToIDLookup;
 
-    public int currentPlayerIndex = 0;
-
-    public char currentPlayerSymbol = 'x';
-
-    //public int usernameSignifier = 0;
-
-    public int playerCount = 0;
-
-    public bool bRoomFull = false;
-
-    public Dictionary<string, List<int>> roomClients = new Dictionary<string, List<int>>();
-
-    public string roomName;
+   
 
     void Start()
     {

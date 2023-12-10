@@ -7,6 +7,7 @@ using System;
 using UnityEditor.Experimental.GraphView;
 using Unity.VisualScripting;
 using System.Security.Cryptography;
+using UnityEditor.PackageManager;
 
 public static class Data
 {
@@ -27,6 +28,20 @@ public class Account
 
 static public class NetworkServerProcessing
 {
+    public static int currentPlayerIndex = 0;
+
+    public static char currentPlayerSymbol = 'x';
+
+    //public int usernameSignifier = 0;
+
+    public static int playerCount = 0;
+
+    public static bool bRoomFull = false;
+
+    public static Dictionary<string, List<int>> roomClients = new Dictionary<string, List<int>>();
+
+    public static string roomName;
+
     const char sep = ',';
     #region Send and Receive Data Functions
     static public void ReceivedMessageFromClient(string msg, int clientConnectionID, TransportPipeline pipeline)
@@ -102,7 +117,42 @@ static public class NetworkServerProcessing
             SendMessageToClient(ServerToClientSignifiers.Debug.ToString() + sep +
                 "Invalid username or password", clientConnectionID, TransportPipeline.ReliableAndInOrder);
         }
+        else if (signifier == ClientToServerSignifiers.RoomJoin)
+        {
+            roomName = csv[1];
+            if (!roomClients.ContainsKey(roomName))
+            {
+                roomClients[roomName] = new List<int>();
+            }
+            roomClients[roomName].Add(clientConnectionID);
+            playerCount += 1;
+        }
+        else if (signifier == ClientToServerSignifiers.RoomExit)
+        {
+            roomName = csv[1];
+            if (roomClients.ContainsKey(roomName))
+            {
+                roomClients[roomName] = new List<int>();
+            }
+            roomClients[roomName].Remove(clientConnectionID);
+            playerCount -= 1;
+        }
 
+        if (!bRoomFull)
+        {
+            if (playerCount == 2)
+            {
+                List<int> clientsInRoom = roomClients[roomName]; // Get the clients in the room
+                for (int i = 0; i < 2; i++)
+                {
+                    SendMessageToClient(ServerToClientSignifiers.CreateGame.ToString(), clientsInRoom[i], TransportPipeline.ReliableAndInOrder);
+                }
+
+                // Send the "YOUR_TURN" message to the first client in the room
+                SendMessageToClient(ServerToClientSignifiers.WhosTurn.ToString(), clientsInRoom[0], TransportPipeline.ReliableAndInOrder);
+                bRoomFull = true;
+            }
+        }
     }
     static public void SendMessageToClient(string msg, int clientConnectionID, TransportPipeline pipeline)
     {
