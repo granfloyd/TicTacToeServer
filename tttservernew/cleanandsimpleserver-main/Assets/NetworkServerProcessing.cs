@@ -32,13 +32,16 @@ static public class NetworkServerProcessing
     public static int currentPlayerIndex = 0;
 
     public static char currentPlayerSymbol = 'x';
-                                                                /// Room name        // Clients IDs 
-    public static Dictionary<string, List<int>> roomClients = new Dictionary<string, List<int>>();
-                                                                 //Room name         //Player
-    public static Dictionary<string, int[]> roomPlayers = new Dictionary<string, int[]>();
+
     public static string roomName;
 
-    
+    public static List<string> createdRooms = new List<string>();//rooms
+
+    public static Dictionary<int, string> clientRooms = new Dictionary<int, string>();
+
+    public static Dictionary<string, List<int>> roomClients = new Dictionary<string, List<int>>();//clients
+
+    public static Dictionary<string, int[]> roomPlayers = new Dictionary<string, int[]>();//players
 
     const char sep = ',';
     const int maxPlayerCount = 3;
@@ -46,7 +49,6 @@ static public class NetworkServerProcessing
 
     static public void ReceivedMessageFromClient(string msg, int clientConnectionID, TransportPipeline pipeline)
     {
-        Debug.Log(currentPlayerIndex);
         LoadData();
         Debug.Log("Network msg received =  " + msg + ", from connection id = " + clientConnectionID + ", from pipeline = " + pipeline);
 
@@ -66,12 +68,12 @@ static public class NetworkServerProcessing
             for (int i = 0; i < networkServer.networkConnections.Length; i++)   //send to all connected users
             {
                 //1,username,text
-                SendMessageToClient(ServerToClientSignifiers.ChatMSG.ToString() + sep + chatusername + sep + chattext, i, TransportPipeline.ReliableAndInOrder);
+                SendMessageToClient(ServerToClientSignifiers.GlobalChatMSG.ToString() + sep + chatusername + sep + chattext, i, TransportPipeline.ReliableAndInOrder);
             }
         }
         else if (signifier == ClientToServerSignifiers.MakeAccount)
         {
-            
+
             // Check if an account with the same username already exists
             foreach (Account account in Data.accounts)
             {
@@ -100,7 +102,7 @@ static public class NetworkServerProcessing
                 if (account.username == csv[1] && account.password == hashedPassword)
                 {
                     // If it does, send a success message back to the client and return
-                    SendMessageToClient(ServerToClientSignifiers.LoginData.ToString(), clientConnectionID, 
+                    SendMessageToClient(ServerToClientSignifiers.LoginData.ToString(), clientConnectionID,
                         TransportPipeline.ReliableAndInOrder);
                     return;
                 }
@@ -109,116 +111,122 @@ static public class NetworkServerProcessing
                 clientConnectionID, TransportPipeline.ReliableAndInOrder);
         }
         else if (signifier == ClientToServerSignifiers.RoomJoin)
-        {      
+        {
             roomName = csv[1];
-            
+
             if (!roomClients.ContainsKey(roomName))
             {
                 roomClients[roomName] = new List<int>();
                 roomPlayers[roomName] = new int[2] { -1, -1 };//player1 and player2
+                createdRooms.Add(roomName); //add room name to list 
             }
             List<int> clientsInRoom = roomClients[roomName]; // Get the clients in the room
             roomClients[roomName].Add(clientConnectionID);
-            Debug.Log(clientsInRoom.Count);
+            clientRooms[clientConnectionID] = roomName; // client in room
 
             if (clientsInRoom.Count < maxPlayerCount)//if less then 2 people are in room
             {
                 if (roomPlayers[roomName][0] == -1)
                 {
                     roomPlayers[roomName][0] = clientConnectionID;
-                    Debug.Log("yes1");
                 }
                 else if (roomPlayers[roomName][1] == -1)
                 {
                     roomPlayers[roomName][1] = clientConnectionID;
-                    Debug.Log("yes2");
                 }
             }
             if (clientsInRoom.Count < maxPlayerCount && roomPlayers[roomName][0] >= 0 && roomPlayers[roomName][1] >= 0)//only sends if atleast 2 ppl in lobby and player1 and player2 are assined 
             {
-                Debug.Log("only sending this to the " + roomPlayers[roomName][0]);
                 SendMessageToClient(ServerToClientSignifiers.CreateGame.ToString(), roomPlayers[roomName][0], TransportPipeline.ReliableAndInOrder);
-
-                Debug.Log("only sending this to the " + roomPlayers[roomName][1]);
                 SendMessageToClient(ServerToClientSignifiers.CreateGame.ToString(), roomPlayers[roomName][1], TransportPipeline.ReliableAndInOrder);
 
                 // Send the "YOUR_TURN" message to the first client in the room
-                SendMessageToClient(ServerToClientSignifiers.WhosTurn.ToString(), roomPlayers[roomName][0], TransportPipeline.ReliableAndInOrder);
-                currentPlayerIndex = 1;
+                SendMessageToClient(ServerToClientSignifiers.CurrentTurn.ToString(), roomPlayers[roomName][0], TransportPipeline.ReliableAndInOrder);
             }
-            if(clientsInRoom.Count >= maxPlayerCount)//only send thid if others join after player1 and player2 so for 2+
+            if (clientsInRoom.Count >= maxPlayerCount)//only send thid if others join after player1 and player2 so for 2+
             {
                 SendMessageToClient(ServerToClientSignifiers.RoomSpectate.ToString(), clientConnectionID, TransportPipeline.ReliableAndInOrder);
                 Debug.Log("spectating");
             }
-            
+
         }
         else if (signifier == ClientToServerSignifiers.RoomExit)
         {
-            roomName = csv[1];
+            roomName = clientRooms[clientConnectionID]; //roomname from client
             if (roomClients.ContainsKey(roomName))
             {
                 roomClients[roomName].Remove(clientConnectionID);
+                clientRooms.Remove(clientConnectionID);
                 if (roomPlayers[roomName][0] == clientConnectionID)
                 {
                     roomPlayers[roomName][0] = -1;
-                    Debug.Log("player1value = " + roomPlayers[roomName][0]);
                 }
                 else if (roomPlayers[roomName][1] == clientConnectionID)
                 {
                     roomPlayers[roomName][1] = -1;
-                    Debug.Log("player2value = " + roomPlayers[roomName][1]);
                 }
             }
-            List<int> clientsInRoom = roomClients[roomName]; // Get the clients in the room
-            Debug.Log(clientsInRoom.Count);
 
-            if (roomClients[roomName].Count == 0)
+            if (roomClients[roomName].Count == 0)//if no one is in the room remove it
             {
                 roomClients.Remove(roomName);
                 roomPlayers.Remove(roomName);
+                createdRooms.Remove(roomName);
             }
         }
 
-        else if (signifier == ClientToServerSignifiers.DisplayMove)
+        else if (signifier == ClientToServerSignifiers.SendMove)
         {
-            currentPlayerIndex++;
-            if (currentPlayerIndex >= networkServer.networkConnections.Length)
-                currentPlayerIndex = 0;
-
-            // Switch the currentPlayerSymbol to the other player's symbol
-            currentPlayerSymbol = currentPlayerSymbol == 'x' ? 'o' : 'x';
-
-            // Send a "MOVE" message to all clients
-            string moveMsg = ServerToClientSignifiers.DisplayMove.ToString() + sep +
-                csv[1] + sep +
-                currentPlayerSymbol.ToString();
-            for (int i = 0; i < networkServer.networkConnections.Length; i++)
+            string roomName = clientRooms[clientConnectionID];
+            if (createdRooms.Contains(roomName))
             {
-                SendMessageToClient(moveMsg, i, TransportPipeline.ReliableAndInOrder);
+                int[] playersInRoom = roomPlayers[roomName];
+
+                int currentPlayerIndex = Array.IndexOf(playersInRoom, clientConnectionID);
+                switch (currentPlayerIndex)
+                {
+                    case 0:
+                        currentPlayerIndex = 1;
+                        break;
+                    case 1:
+                        currentPlayerIndex = 0;
+                        break;
+                }
+                // Switch the currentPlayerSymbol to the other player's symbol
+                currentPlayerSymbol = currentPlayerSymbol == 'x' ? 'o' : 'x';
+
+                // Send a "MOVE" message to all clients in the room
+                string moveMsg = ServerToClientSignifiers.DisplayMove.ToString() + sep +
+                    csv[1] + sep +
+                    currentPlayerSymbol.ToString();
+                foreach (int clientID in roomClients[roomName])
+                {
+                    SendMessageToClient(moveMsg, clientID, TransportPipeline.ReliableAndInOrder);
+                }
+                // Send a message to the player your turn
+                string turnMsg = ServerToClientSignifiers.CurrentTurn.ToString() + sep +
+                    currentPlayerSymbol.ToString();
+                SendMessageToClient(turnMsg, playersInRoom[currentPlayerIndex], TransportPipeline.ReliableAndInOrder);
             }
-
-            // Send a "YOUR_TURN" message to the current player
-            string turnMsg = ServerToClientSignifiers.WhosTurn.ToString() + sep +
-                currentPlayerSymbol.ToString();
-            SendMessageToClient(turnMsg, currentPlayerIndex, TransportPipeline.ReliableAndInOrder);
-
         }
-        else if (signifier == ClientToServerSignifiers.Loser)
+        else if (signifier == ClientToServerSignifiers.ClearBoard)
         {
-            List<int> clientsInRoom = roomClients[roomName]; // Get the clients in the room
-
-            SendMessageToClient(ServerToClientSignifiers.WhosTurn.ToString(), clientsInRoom[0], TransportPipeline.ReliableAndInOrder);
-            currentPlayerIndex = 1;
-        }
-        else if (signifier == ClientToServerSignifiers.Winner)
-        {
-            List<int> clientsInRoom = roomClients[roomName]; // Get the clients in the room
-
-            SendMessageToClient(ServerToClientSignifiers.WhosTurn.ToString(), clientsInRoom[0], TransportPipeline.ReliableAndInOrder);
-            currentPlayerIndex = 1;
+            string roomName = clientRooms[clientConnectionID];// Get the room name
+            int[] playersInRoom = roomPlayers[roomName]; // Get the players in the room
+            List<int> clientsInRoom = roomClients[roomName];// Get the clients in the room
+            foreach (int playerID in playersInRoom)
+            {
+                SendMessageToClient(ServerToClientSignifiers.ClearedBoard.ToString(), playerID, TransportPipeline.ReliableAndInOrder);
+                SendMessageToClient(ServerToClientSignifiers.CurrentTurn.ToString(), roomPlayers[roomName][0], TransportPipeline.ReliableAndInOrder);
+            }
+            //foreach (int spectaterID in clientsInRoom)
+            //{
+            //    SendMessageToClient(ServerToClientSignifiers.ClearedBoard.ToString(), spectaterID, TransportPipeline.ReliableAndInOrder);
+            //}
+            
         }
     }
+
     static public void SendMessageToClient(string msg, int clientConnectionID, TransportPipeline pipeline)
     {
         networkServer.SendMessageToClient(msg, clientConnectionID, pipeline);
@@ -322,43 +330,36 @@ static public class NetworkServerProcessing
 #region Protocol Signifiers
 static public class ClientToServerSignifiers
 {
-    public const int ChatMSG = 1;
-    public const int MakeAccount = 2;
-    public const int LoginData = 3;
-    public const int AccountExists = 31;
-    public const int AccountMade = 32;
-    public const int WrongPasswordOrUsername = 34;
-    public const int CreateGame = 4;
-    public const int WhosTurn = 5;
-    public const int DisplayMove = 6;
-    public const int FirstStart = 99;
-    public const int Restart = 7;
-    public const int RoomJoin = 11;
-    public const int RoomExit = 12;
-    public const int RoomSpectate = 13;
-    public const int Winner = 21;
-    public const int Loser = 22;
+    public const int ChatMSG = 10; //sends server chat msg 
+
+    public const int MakeAccount = 20;   //sends server client login data for new account
+    public const int LoginData = 21;     //sends server client login data only for made accounts
+
+    public const int SendMove = 30;      //send move to server
+    public const int ClearBoard = 31;        //new
+
+    public const int RoomJoin = 40;
+    public const int RoomSpectate = 41;
+    public const int RoomExit = 42;
+
 }
 
 static public class ServerToClientSignifiers
 {
-    public const int ChatMSG = 1;
-    public const int MakeAccount = 2;
-    public const int LoginData = 3;
-    public const int AccountExists = 31;
-    public const int AccountMade = 32;
-    public const int WrongPasswordOrUsername = 34;
-    public const int CreateGame = 4;
-    public const int WhosTurn = 5;
-    public const int DisplayMove = 6;
-    public const int FirstStart = 99;
-    public const int Restart = 7;
-    public const int RoomJoin = 11;
-    public const int RoomExit = 12;
-    public const int RoomSpectate = 13;
-    public const int Winner = 21;
-    public const int Loser = 22;
-}
+    public const int GlobalChatMSG = 10;
 
+    public const int LoginData = 20;
+    public const int AccountExists = 21;
+    public const int AccountMade = 22;
+    public const int WrongPasswordOrUsername = 23;
+
+    public const int CreateGame = 30;
+    public const int CurrentTurn = 31;
+    public const int DisplayMove = 32;
+    public const int ClearedBoard = 33;
+
+    public const int RoomSpectate = 40;
+
+}
 #endregion
 
