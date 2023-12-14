@@ -1,14 +1,9 @@
-using System.Collections;
 using System.Collections.Generic;
 using System.IO;
 using UnityEngine;
 using System.Text;
 using System;
-using UnityEditor.Experimental.GraphView;
-using Unity.VisualScripting;
 using System.Security.Cryptography;
-using UnityEditor.PackageManager;
-using Unity.Networking.Transport;
 
 public static class Data
 {
@@ -155,6 +150,14 @@ static public class NetworkServerProcessing
                 }
                 Debug.Log("We got a spectater ");
             }
+            if (roomGameStates.ContainsKey(roomName))
+            {
+                foreach (string moveMsg in roomGameStates[roomName])
+                {
+                    SendMessageToClient(moveMsg, clientConnectionID, TransportPipeline.ReliableAndInOrder);
+                    Debug.Log("welcomeback");
+                }
+            }
 
         }
         else if (signifier == ClientToServerSignifiers.RoomExit)
@@ -201,6 +204,10 @@ static public class NetworkServerProcessing
                     SendMessageToClient(moveMsg, clientID, TransportPipeline.ReliableAndInOrder);
                 }
 
+                foreach (int playerID in roomPlayers[roomName])
+                {
+                    SendMessageToClient(moveMsg, playerID, TransportPipeline.ReliableAndInOrder);
+                }
                 //adds move to rooms game
                 if (!roomGameStates.ContainsKey(roomName))
                 {
