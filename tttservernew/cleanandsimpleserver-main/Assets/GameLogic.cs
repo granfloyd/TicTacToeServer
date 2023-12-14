@@ -4,6 +4,8 @@ using UnityEngine;
 
 public class GameLogic : MonoBehaviour
 {
+    //public int player1 = -1;
+    //public int player2 = -1;
     void Start()
     {
         NetworkServerProcessing.SetGameLogic(this);

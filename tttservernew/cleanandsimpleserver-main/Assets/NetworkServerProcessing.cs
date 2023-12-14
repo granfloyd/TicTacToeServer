@@ -32,25 +32,21 @@ static public class NetworkServerProcessing
     public static int currentPlayerIndex = 0;
 
     public static char currentPlayerSymbol = 'x';
-
-    //public int usernameSignifier = 0;
-
-    public static int playerCount = 0;
-
-    public static bool bRoomFull = false;
                                                                 /// Room name        // Clients IDs 
     public static Dictionary<string, List<int>> roomClients = new Dictionary<string, List<int>>();
-
+                                                                 //Room name         //Player
+    public static Dictionary<string, int[]> roomPlayers = new Dictionary<string, int[]>();
     public static string roomName;
 
-    const char sep = ',';
+    
 
-    private const int wrongLoginInfo = 4;
+    const char sep = ',';
+    const int maxPlayerCount = 3;
     #region Send and Receive Data Functions
 
     static public void ReceivedMessageFromClient(string msg, int clientConnectionID, TransportPipeline pipeline)
     {
-        //Debug.Log(currentPlayerIndex);
+        Debug.Log(currentPlayerIndex);
         LoadData();
         Debug.Log("Network msg received =  " + msg + ", from connection id = " + clientConnectionID + ", from pipeline = " + pipeline);
 
@@ -113,42 +109,77 @@ static public class NetworkServerProcessing
                 clientConnectionID, TransportPipeline.ReliableAndInOrder);
         }
         else if (signifier == ClientToServerSignifiers.RoomJoin)
-        {
+        {      
             roomName = csv[1];
+            
             if (!roomClients.ContainsKey(roomName))
             {
                 roomClients[roomName] = new List<int>();
+                roomPlayers[roomName] = new int[2] { -1, -1 };//player1 and player2
             }
+            List<int> clientsInRoom = roomClients[roomName]; // Get the clients in the room
             roomClients[roomName].Add(clientConnectionID);
-            playerCount += 1;
+            Debug.Log(clientsInRoom.Count);
+
+            if (clientsInRoom.Count < maxPlayerCount)//if less then 2 people are in room
+            {
+                if (roomPlayers[roomName][0] == -1)
+                {
+                    roomPlayers[roomName][0] = clientConnectionID;
+                    Debug.Log("yes1");
+                }
+                else if (roomPlayers[roomName][1] == -1)
+                {
+                    roomPlayers[roomName][1] = clientConnectionID;
+                    Debug.Log("yes2");
+                }
+            }
+            if (clientsInRoom.Count < maxPlayerCount && roomPlayers[roomName][0] >= 0 && roomPlayers[roomName][1] >= 0)//only sends if atleast 2 ppl in lobby and player1 and player2 are assined 
+            {
+                Debug.Log("only sending this to the " + roomPlayers[roomName][0]);
+                SendMessageToClient(ServerToClientSignifiers.CreateGame.ToString(), roomPlayers[roomName][0], TransportPipeline.ReliableAndInOrder);
+
+                Debug.Log("only sending this to the " + roomPlayers[roomName][1]);
+                SendMessageToClient(ServerToClientSignifiers.CreateGame.ToString(), roomPlayers[roomName][1], TransportPipeline.ReliableAndInOrder);
+
+                // Send the "YOUR_TURN" message to the first client in the room
+                SendMessageToClient(ServerToClientSignifiers.WhosTurn.ToString(), roomPlayers[roomName][0], TransportPipeline.ReliableAndInOrder);
+                currentPlayerIndex = 1;
+            }
+            if(clientsInRoom.Count >= maxPlayerCount)//only send thid if others join after player1 and player2 so for 2+
+            {
+                SendMessageToClient(ServerToClientSignifiers.RoomSpectate.ToString(), clientConnectionID, TransportPipeline.ReliableAndInOrder);
+                Debug.Log("spectating");
+            }
+            
         }
         else if (signifier == ClientToServerSignifiers.RoomExit)
         {
             roomName = csv[1];
             if (roomClients.ContainsKey(roomName))
             {
-                roomClients[roomName] = new List<int>();
-            }
-            roomClients[roomName].Remove(clientConnectionID);
-            playerCount -= 1;
-        }
-
-        if (!bRoomFull)
-        {
-            if (playerCount == 2)
-            {
-                List<int> clientsInRoom = roomClients[roomName]; // Get the clients in the room
-                for (int i = 0; i < 2; i++)
+                roomClients[roomName].Remove(clientConnectionID);
+                if (roomPlayers[roomName][0] == clientConnectionID)
                 {
-                    SendMessageToClient(ServerToClientSignifiers.CreateGame.ToString(), clientsInRoom[i], TransportPipeline.ReliableAndInOrder);
+                    roomPlayers[roomName][0] = -1;
+                    Debug.Log("player1value = " + roomPlayers[roomName][0]);
                 }
+                else if (roomPlayers[roomName][1] == clientConnectionID)
+                {
+                    roomPlayers[roomName][1] = -1;
+                    Debug.Log("player2value = " + roomPlayers[roomName][1]);
+                }
+            }
+            List<int> clientsInRoom = roomClients[roomName]; // Get the clients in the room
+            Debug.Log(clientsInRoom.Count);
 
-                // Send the "YOUR_TURN" message to the first client in the room
-                SendMessageToClient(ServerToClientSignifiers.WhosTurn.ToString(), clientsInRoom[0], TransportPipeline.ReliableAndInOrder);
-                currentPlayerIndex = 1;
-                bRoomFull = true;
+            if (roomClients[roomName].Count == 0)
+            {
+                roomClients.Remove(roomName);
+                roomPlayers.Remove(roomName);
             }
         }
+
         else if (signifier == ClientToServerSignifiers.DisplayMove)
         {
             currentPlayerIndex++;
@@ -304,6 +335,7 @@ static public class ClientToServerSignifiers
     public const int Restart = 7;
     public const int RoomJoin = 11;
     public const int RoomExit = 12;
+    public const int RoomSpectate = 13;
     public const int Winner = 21;
     public const int Loser = 22;
 }
@@ -323,6 +355,7 @@ static public class ServerToClientSignifiers
     public const int Restart = 7;
     public const int RoomJoin = 11;
     public const int RoomExit = 12;
+    public const int RoomSpectate = 13;
     public const int Winner = 21;
     public const int Loser = 22;
 }
