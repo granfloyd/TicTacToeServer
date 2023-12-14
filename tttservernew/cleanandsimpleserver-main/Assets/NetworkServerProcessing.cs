@@ -38,16 +38,13 @@ static public class NetworkServerProcessing
     public static int playerCount = 0;
 
     public static bool bRoomFull = false;
-
+                                                                /// Room name        // Clients IDs 
     public static Dictionary<string, List<int>> roomClients = new Dictionary<string, List<int>>();
 
     public static string roomName;
 
     const char sep = ',';
 
-    private const int accountExist = 1;
-    private const int accountMade = 2;
-    private const int welcomeMsg = 3;
     private const int wrongLoginInfo = 4;
     #region Send and Receive Data Functions
 
@@ -84,8 +81,7 @@ static public class NetworkServerProcessing
             {
                 if (account.username == csv[1])
                 {
-                    SendMessageToClient(ServerToClientSignifiers.AccountExists.ToString() + sep +
-                        accountExist, clientConnectionID, TransportPipeline.ReliableAndInOrder);
+                    SendMessageToClient(ServerToClientSignifiers.AccountExists.ToString(), clientConnectionID, TransportPipeline.ReliableAndInOrder);
                     return;
                 }
             }
@@ -96,8 +92,7 @@ static public class NetworkServerProcessing
             Data.accounts.AddLast(newAccount);
             // Save the updated accounts list to disk
             SaveData();
-            SendMessageToClient(ServerToClientSignifiers.AccountMade.ToString() + sep +
-                accountMade, clientConnectionID, TransportPipeline.ReliableAndInOrder);
+            SendMessageToClient(ServerToClientSignifiers.AccountMade.ToString(), clientConnectionID, TransportPipeline.ReliableAndInOrder);
         }
         else if (signifier == ClientToServerSignifiers.LoginData)
         {
@@ -109,16 +104,13 @@ static public class NetworkServerProcessing
                 if (account.username == csv[1] && account.password == hashedPassword)
                 {
                     // If it does, send a success message back to the client and return
-                    string usernameMsg = csv[1];
-                    string logindatamsg = ServerToClientSignifiers.LoginData.ToString() + sep + usernameMsg;
-
-                    SendMessageToClient(logindatamsg, clientConnectionID, TransportPipeline.ReliableAndInOrder);
-                    SendMessageToClient(ServerToClientSignifiers.WelcomeMSG.ToString() + sep + welcomeMsg + usernameMsg, clientConnectionID, TransportPipeline.ReliableAndInOrder);
+                    SendMessageToClient(ServerToClientSignifiers.LoginData.ToString(), clientConnectionID, 
+                        TransportPipeline.ReliableAndInOrder);
                     return;
                 }
             }
-            SendMessageToClient(ServerToClientSignifiers.WrongPasswordOrUsername.ToString() + sep +
-                wrongLoginInfo, clientConnectionID, TransportPipeline.ReliableAndInOrder);
+            SendMessageToClient(ServerToClientSignifiers.WrongPasswordOrUsername.ToString(),
+                clientConnectionID, TransportPipeline.ReliableAndInOrder);
         }
         else if (signifier == ClientToServerSignifiers.RoomJoin)
         {
@@ -304,11 +296,11 @@ static public class ClientToServerSignifiers
     public const int LoginData = 3;
     public const int AccountExists = 31;
     public const int AccountMade = 32;
-    public const int WelcomeMSG = 33;
     public const int WrongPasswordOrUsername = 34;
     public const int CreateGame = 4;
     public const int WhosTurn = 5;
     public const int DisplayMove = 6;
+    public const int FirstStart = 99;
     public const int Restart = 7;
     public const int RoomJoin = 11;
     public const int RoomExit = 12;
@@ -323,7 +315,6 @@ static public class ServerToClientSignifiers
     public const int LoginData = 3;
     public const int AccountExists = 31;
     public const int AccountMade = 32;
-    public const int WelcomeMSG = 33;
     public const int WrongPasswordOrUsername = 34;
     public const int CreateGame = 4;
     public const int WhosTurn = 5;
@@ -334,7 +325,6 @@ static public class ServerToClientSignifiers
     public const int RoomExit = 12;
     public const int Winner = 21;
     public const int Loser = 22;
-    public const int Debug = 69;
 }
 
 #endregion
