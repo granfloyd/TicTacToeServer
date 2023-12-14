@@ -44,11 +44,16 @@ static public class NetworkServerProcessing
     public static string roomName;
 
     const char sep = ',';
+
+    private const int accountExist = 1;
+    private const int accountMade = 2;
+    private const int welcomeMsg = 3;
+    private const int wrongLoginInfo = 4;
     #region Send and Receive Data Functions
 
     static public void ReceivedMessageFromClient(string msg, int clientConnectionID, TransportPipeline pipeline)
     {
-        Debug.Log(currentPlayerIndex);
+        //Debug.Log(currentPlayerIndex);
         LoadData();
         Debug.Log("Network msg received =  " + msg + ", from connection id = " + clientConnectionID + ", from pipeline = " + pipeline);
 
@@ -65,11 +70,6 @@ static public class NetworkServerProcessing
             string chatusername = csv[1];
             string chattext = csv[2];
 
-            if (chatusername == "")    //if username is empty chat default username will be depression:
-            {
-                chatusername = "yeahdawg101";
-                Debug.Log("From Server: Username cannot be blank.");
-            }
             for (int i = 0; i < networkServer.networkConnections.Length; i++)   //send to all connected users
             {
                 //1,username,text
@@ -78,13 +78,14 @@ static public class NetworkServerProcessing
         }
         else if (signifier == ClientToServerSignifiers.MakeAccount)
         {
+            
             // Check if an account with the same username already exists
             foreach (Account account in Data.accounts)
             {
                 if (account.username == csv[1])
                 {
-                    SendMessageToClient(ServerToClientSignifiers.Debug.ToString() + sep +
-                        "Account already exists", clientConnectionID, TransportPipeline.ReliableAndInOrder);
+                    SendMessageToClient(ServerToClientSignifiers.AccountExists.ToString() + sep +
+                        accountExist, clientConnectionID, TransportPipeline.ReliableAndInOrder);
                     return;
                 }
             }
@@ -95,8 +96,8 @@ static public class NetworkServerProcessing
             Data.accounts.AddLast(newAccount);
             // Save the updated accounts list to disk
             SaveData();
-            SendMessageToClient(ServerToClientSignifiers.Debug.ToString() + sep +
-                "Account created successfully", clientConnectionID, TransportPipeline.ReliableAndInOrder);
+            SendMessageToClient(ServerToClientSignifiers.AccountMade.ToString() + sep +
+                accountMade, clientConnectionID, TransportPipeline.ReliableAndInOrder);
         }
         else if (signifier == ClientToServerSignifiers.LoginData)
         {
@@ -112,13 +113,12 @@ static public class NetworkServerProcessing
                     string logindatamsg = ServerToClientSignifiers.LoginData.ToString() + sep + usernameMsg;
 
                     SendMessageToClient(logindatamsg, clientConnectionID, TransportPipeline.ReliableAndInOrder);
-                    SendMessageToClient(ServerToClientSignifiers.Debug.ToString() + sep +
-                    "Welcome " + usernameMsg, clientConnectionID, TransportPipeline.ReliableAndInOrder);
+                    SendMessageToClient(ServerToClientSignifiers.WelcomeMSG.ToString() + sep + welcomeMsg + usernameMsg, clientConnectionID, TransportPipeline.ReliableAndInOrder);
                     return;
                 }
             }
-            SendMessageToClient(ServerToClientSignifiers.Debug.ToString() + sep +
-                "Invalid username or password", clientConnectionID, TransportPipeline.ReliableAndInOrder);
+            SendMessageToClient(ServerToClientSignifiers.WrongPasswordOrUsername.ToString() + sep +
+                wrongLoginInfo, clientConnectionID, TransportPipeline.ReliableAndInOrder);
         }
         else if (signifier == ClientToServerSignifiers.RoomJoin)
         {
@@ -302,6 +302,10 @@ static public class ClientToServerSignifiers
     public const int ChatMSG = 1;
     public const int MakeAccount = 2;
     public const int LoginData = 3;
+    public const int AccountExists = 31;
+    public const int AccountMade = 32;
+    public const int WelcomeMSG = 33;
+    public const int WrongPasswordOrUsername = 34;
     public const int CreateGame = 4;
     public const int WhosTurn = 5;
     public const int DisplayMove = 6;
@@ -317,6 +321,10 @@ static public class ServerToClientSignifiers
     public const int ChatMSG = 1;
     public const int MakeAccount = 2;
     public const int LoginData = 3;
+    public const int AccountExists = 31;
+    public const int AccountMade = 32;
+    public const int WelcomeMSG = 33;
+    public const int WrongPasswordOrUsername = 34;
     public const int CreateGame = 4;
     public const int WhosTurn = 5;
     public const int DisplayMove = 6;
