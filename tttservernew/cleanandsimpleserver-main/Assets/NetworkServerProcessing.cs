@@ -25,19 +25,12 @@ public class Account
 static public class NetworkServerProcessing
 {
     public static string moveMsg = "";
-
     public static string roomName;
-
     public static List<string> createdRooms = new List<string>();//rooms
-
     public static Dictionary<int, string> clientRooms = new Dictionary<int, string>();
-
     public static Dictionary<string, List<int>> roomClients = new Dictionary<string, List<int>>();//clients
-
     public static Dictionary<string, int[]> roomPlayers = new Dictionary<string, int[]>();//players
-
     public static Dictionary<string, List<string>> roomGameStates = new Dictionary<string, List<string>>();
-
     const char sep = ',';
     const int maxPlayerCount = 3;
     #region Send and Receive Data Functions
@@ -46,10 +39,8 @@ static public class NetworkServerProcessing
     {
         LoadData();
         Debug.Log("Network msg received =  " + msg + ", from connection id = " + clientConnectionID + ", from pipeline = " + pipeline);
-
         string[] csv = msg.Split(sep);
         int signifier = int.Parse(csv[0]);
-
         if (signifier == ClientToServerSignifiers.ChatMSG)
         {
             if (csv.Length < 3)
@@ -59,7 +50,6 @@ static public class NetworkServerProcessing
             }
             string chatusername = csv[1];
             string chattext = csv[2];
-
             for (int i = 0; i < networkServer.networkConnections.Length; i++)   //send to all connected users
             {
                 //1,username,text
@@ -68,7 +58,6 @@ static public class NetworkServerProcessing
         }
         else if (signifier == ClientToServerSignifiers.MakeAccount)
         {
-
             // Check if an account with the same username already exists
             foreach (Account account in Data.accounts)
             {
@@ -81,9 +70,7 @@ static public class NetworkServerProcessing
             //hash the Account password
             string hashedPassword = Convert.ToBase64String(SHA256.Create().ComputeHash(Encoding.UTF8.GetBytes(csv[2])));
             Account newAccount = new Account(csv[1], hashedPassword);
-            // Add the new account to the accounts list
             Data.accounts.AddLast(newAccount);
-            // Save the updated accounts list to disk
             SaveData();
             SendMessageToClient(ServerToClientSignifiers.AccountMade.ToString(), clientConnectionID, TransportPipeline.ReliableAndInOrder);
         }
@@ -96,7 +83,6 @@ static public class NetworkServerProcessing
             {
                 if (account.username == csv[1] && account.password == hashedPassword)
                 {
-                    // If it does, send a success message back to the client and return
                     SendMessageToClient(ServerToClientSignifiers.LoginData.ToString(), clientConnectionID,
                         TransportPipeline.ReliableAndInOrder);
                     return;
@@ -134,7 +120,6 @@ static public class NetworkServerProcessing
             {
                 SendMessageToClient(ServerToClientSignifiers.CreateGame.ToString(), roomPlayers[roomName][0], TransportPipeline.ReliableAndInOrder);
                 SendMessageToClient(ServerToClientSignifiers.CreateGame.ToString(), roomPlayers[roomName][1], TransportPipeline.ReliableAndInOrder);
-
                 // Send the "YOUR_TURN" message to the first client in the room
                 SendMessageToClient(ServerToClientSignifiers.CurrentTurn.ToString(), roomPlayers[roomName][0], TransportPipeline.ReliableAndInOrder);
             }
